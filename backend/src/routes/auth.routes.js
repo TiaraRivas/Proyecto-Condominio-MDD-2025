@@ -1,11 +1,12 @@
-import { Router } from "express"
-import { login, register, logout } from "../controllers/auth.controller.js"
+"use strict";
+import { Router } from "express";
+import { login, logout, register } from "../controllers/auth.controller.js";
 
-const router = new Router();
+const router = Router();
 
-// Rutas de autenticación
-router.post("/register", register);
-router.post("/login", login);
-router.post("/logout", logout);
+router
+  .post("/login", login)
+  .post("/register", register)
+  .post("/logout", logout);
 
 export default router;

@@ -1,115 +1,125 @@
 "use strict";
-import User from "../entity/user.entity.js";
-import { AppDataSource } from "../config/configDb.js";
+import {
+  deleteUserService,
+  getUserService,
+  getUsersService,
+  updateUserService,
+} from "../services/user.service.js";
+import {
+  userBodyValidation,
+  userQueryValidation,
+} from "../validations/user.validation.js";
+import {
+  handleErrorClient,
+  handleErrorServer,
+  handleSuccess,
+} from "../handlers/responseHandlers.js";
+
+export async function getUser(req, res) {
+  try {
+    const { rut, id, email } = req.query;
+
+    const { error } = userQueryValidation.validate({ rut, id, email });
+
+    if (error) return handleErrorClient(res, 400, error.message);
+
+    const [user, errorUser] = await getUserService({ rut, id, email });
+
+    if (errorUser) return handleErrorClient(res, 404, errorUser);
+
+    handleSuccess(res, 200, "Usuario encontrado", user);
+  } catch (error) {
+    handleErrorServer(res, 500, error.message);
+  }
+}
 
 export async function getUsers(req, res) {
   try {
-    // Obtener el repositorio de usuarios y buscar todos los usuarios
-    const userRepository = AppDataSource.getRepository(User);
-    const users = await userRepository.find();
+    const [users, errorUsers] = await getUsersService();
 
-    res.status(200).json({ message: "Usuarios encontrados: ", data: users });
+    if (errorUsers) return handleErrorClient(res, 404, errorUsers);
+
+    users.length === 0
+      ? handleSuccess(res, 204)
+      : handleSuccess(res, 200, "Usuarios encontrados", users);
   } catch (error) {
-    console.error("Error en user.controller.js -> getUsers(): ", error);
-    res.status(500).json({ message: "Error interno del servidor." });
+    handleErrorServer(
+      res,
+      500,
+      error.message,
+    );
   }
 }
 
-export async function getUserById(req, res) {
+export async function updateUser(req, res) {
   try {
-    // Obtener el repositorio de usuarios y buscar un usuario por ID
-    const userRepository = AppDataSource.getRepository(User);
-    const { id } = req.params;
-    const user = await userRepository.findOne({ where: { id } });
+    const { rut, id, email } = req.query;
+    const { body } = req;
 
-    // Si no se encuentra el usuario, devolver un error 404
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado." });
+    const { error: queryError } = userQueryValidation.validate({
+      rut,
+      id,
+      email,
+    });
+
+    if (queryError) {
+      return handleErrorClient(
+        res,
+        400,
+        "Error de validación en la consulta",
+        queryError.message,
+      );
     }
 
-    res.status(200).json({ message: "Usuario encontrado: ", data: user });
+    const { error: bodyError } = userBodyValidation.validate(body);
+
+    if (bodyError)
+      return handleErrorClient(
+        res,
+        400,
+        "Error de validación en los datos enviados",
+        bodyError.message,
+      );
+
+    const [user, userError] = await updateUserService({ rut, id, email }, body);
+
+    if (userError) return handleErrorClient(res, 400, "Error modificando al usuario", userError);
+
+    handleSuccess(res, 200, "Usuario modificado correctamente", user);
   } catch (error) {
-    console.error("Error en user.controller.js -> getUserById(): ", error);
-    res.status(500).json({ message: "Error interno del servidor." });
+    handleErrorServer(res, 500, error.message);
   }
 }
 
-export async function updateUserById(req, res) {
+export async function deleteUser(req, res) {
   try {
-    // Obtener el repositorio de usuarios y buscar un usuario por ID
-    const userRepository = AppDataSource.getRepository(User);
-    const { id } = req.params;
-    const { username, email, rut } = req.body;
-    const user = await userRepository.findOne({ where: { id } });
+    const { rut, id, email } = req.query;
 
-    // Si no se encuentra el usuario, devolver un error 404
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado." });
+    const { error: queryError } = userQueryValidation.validate({
+      rut,
+      id,
+      email,
+    });
+
+    if (queryError) {
+      return handleErrorClient(
+        res,
+        400,
+        "Error de validación en la consulta",
+        queryError.message,
+      );
     }
 
-    // Validar que al menos uno de los campos a actualizar esté presente
-    user.username = username || user.username;
-    user.email = email || user.email;
-    user.rut = rut || user.rut;
+    const [userDelete, errorUserDelete] = await deleteUserService({
+      rut,
+      id,
+      email,
+    });
 
-    // Guardar los cambios en la base de datos
-    await userRepository.save(user);
+    if (errorUserDelete) return handleErrorClient(res, 404, "Error eliminado al usuario", errorUserDelete);
 
-    res
-      .status(200)
-      .json({ message: "Usuario actualizado exitosamente.", data: user });
+    handleSuccess(res, 200, "Usuario eliminado correctamente", userDelete);
   } catch (error) {
-    console.error("Error en user.controller.js -> updateUserById(): ", error);
-    res.status(500).json({ message: "Error interno del servidor." });
-  }
-}
-
-export async function deleteUserById(req, res) {
-  try {
-    // Obtener el repositorio de usuarios y buscar el usuario por ID
-    const userRepository = AppDataSource.getRepository(User);
-    const { id } = req.params;
-    const user = await userRepository.findOne({ where: { id } });
-
-    // Si no se encuentra el usuario, devolver un error 404
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado." });
-    }
-
-    // Eliminar el usuario de la base de datos
-    await userRepository.remove(user);
-
-    res.status(200).json({ message: "Usuario eliminado exitosamente." });
-  } catch (error) {
-    console.error("Error en user.controller.js -> deleteUserById(): ", error);
-    res.status(500).json({ message: "Error interno del servidor." });
-  }
-}
-
-export async function getProfile(req, res) {
-  try {
-    // Obtener el repositorio de usuarios y buscar el perfil del usuario autenticado
-    const userRepository = AppDataSource.getRepository(User);
-    const userEmail = req.user.email;
-    const user = await userRepository.findOne({ where: { email: userEmail } });
-    
-    // Si no se encuentra el usuario, devolver un error 404
-    if (!user) {
-      return res.status(404).json({ message: "Perfil no encontrado." });
-    }
-
-    // Formatear la respuesta excluyendo la contraseña
-    const formattedUser = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      rut: user.rut,
-      role: user.role
-    };
-
-    res.status(200).json({ message: "Perfil encontrado: ", data: formattedUser });
-  } catch (error) {
-    console.error("Error en user.controller -> getProfile(): ", error);
-    res.status(500).json({ message: "Error interno del servidor"})
+    handleErrorServer(res, 500, error.message);
   }
 }
