@@ -34,14 +34,14 @@ const upload = multer({
 router.post("/comprobante", authenticateJwt, upload.single("comprobante"), subirComprobante);
 router.get("/mis-pagos", authenticateJwt, obtenerPagos);
 router.get("/:id", authenticateJwt, obtenerPago);
-router.patch("/:id", authenticateJwt, actualizarPago);
-router.delete("/:id", authenticateJwt, eliminarPago);
+router.patch("/actualizar/:id", authenticateJwt, actualizarPago);
+router.delete("/eliminar/:id", authenticateJwt, eliminarPago);
 
 // Rutas para administradores
-router.patch("/validar/:id", authenticateJwt, isAdmin, validarPago);
-router.put("/validar/:id", authenticateJwt, isAdmin, validarPago);
+router.patch("/validar/:id", authenticateJwt, isAdmin, validarPago); // es una de las dos o las dos para que funcione
+//router.put("/validar/:id", authenticateJwt, isAdmin, validarPago);
 
-router.get("/admin/usuario/:rut/historial", authenticateJwt, isAdmin, obtenerHistorialPorRut);
+router.get("/usuario/:rut/historial", authenticateJwt, isAdmin, obtenerHistorialPorRut);
 router.get("/listar/historial", authenticateJwt, isAdmin, listarPagosAdmin);
 
 // Ruta para desarrollo (precarga de datos) - Solo disponible en entorno de desarrollo

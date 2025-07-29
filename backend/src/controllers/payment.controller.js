@@ -1,12 +1,13 @@
 "use strict";
 import { AppDataSource } from "../config/configDb.js";
 import Payment from "../entity/payment.entity.js";
+import User from "../entity/user.entity.js";
 import { paymentBodyValidation } from "../validations/payment.validation.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../handlers/responseHandlers.js";
 import {
   crearPagoService,
   deletePagoService,
-  getPagoService, 
+  getPagoService,
   getPagosService,
   listarPagosService,
   updatePagoService,
@@ -18,18 +19,26 @@ export async function subirComprobante(req, res) {
   try {
     if (!req.user) return handleErrorClient(res, 401, "No autenticado");
     if (req.user.rol !== "usuario") return handleErrorClient(res, 403, "Solo usuarios pueden subir comprobantes");
-    
-    const { error } = paymentBodyValidation.validate(req.body);
+
+    const { error, value } = paymentBodyValidation.validate(req.body);
     if (error) return handleErrorClient(res, 400, error.message);
 
+    // Buscar datos del usuario a partir del RUT
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOne({ where: { rut: value.rut } });
+
+    if (!user) return handleErrorClient(res, 404, "Usuario no encontrado con ese RUT");
+
     const pagoData = {
-      rut: req.user.id,
-      monto: req.body.monto,
-      fecha_pago: req.body.fecha_pago,
-      comprobante_url: req.file ? req.file.path : null,
-      mes_referencia: req.body.mes_referencia,
-      observaciones: req.body.observaciones || null,
-      tipo_de_pago: req.body.tipo_de_pago || "gasto común" // Valor por defecto
+      nombreCompleto: user.nombreCompleto,
+      email: user.email,
+      rut: user.rut,
+      monto: value.monto,
+      fecha_pago: value.fecha_pago,
+      comprobante_url: req.file ? req.file.path : value.comprobante_url || null,
+      mes_referencia: value.mes_referencia,
+      observaciones: value.observaciones || null,
+      tipo_de_pago: value.tipo_de_pago || "gasto común",
     };
 
     if (!pagoData.comprobante_url) return handleErrorClient(res, 400, "El comprobante es obligatorio");
@@ -52,9 +61,9 @@ export async function validarPago(req, res) {
 
     const { id } = req.params;
     const { estado } = req.body;
-    
+
     if (!id || !estado) return handleErrorClient(res, 400, "ID de pago y estado son requeridos");
-    
+
     const estadosValidos = ["pendiente", "aceptado", "rechazado"];
     if (!estadosValidos.includes(estado.toLowerCase())) {
       return handleErrorClient(res, 400, "Estado inválido. Usa: pendiente, aceptado o rechazado");
@@ -83,11 +92,6 @@ export async function listarPagosAdmin(req, res) {
   } catch (error) {
     handleErrorServer(res, 500, error.message);
   }
-  const [pagos, errorPagos] = await listarPagosService();
-if (errorPagos) {
-  console.error("Error en listarPagosAdmin:", errorPagos);
-  return handleErrorClient(res, 500, errorPagos);
-}
 }
 
 // Historial por RUT (admin)
@@ -114,7 +118,7 @@ export async function obtenerPagos(req, res) {
   try {
     if (!req.user) return handleErrorClient(res, 401, "No autenticado");
 
-    const [pagos, errorPagos] = await listarPagosService({ rut: req.user.id });
+    const [pagos, errorPagos] = await listarPagosService({ rut: req.user.rut });
     if (errorPagos) return handleErrorClient(res, 404, errorPagos);
 
     handleSuccess(res, 200, "Historial de pagos obtenido", pagos);
@@ -130,7 +134,7 @@ export async function obtenerPago(req, res) {
     const [pago, errorPago] = await getPagoService({ id });
     if (errorPago) return handleErrorClient(res, 404, errorPago);
 
-    if (req.user.role !== "administrador" && pago.rut !== req.user.id) {
+    if (req.user.role !== "administrador" && pago.rut !== req.user.rut) {
       return handleErrorClient(res, 403, "No autorizado");
     }
 
@@ -147,14 +151,13 @@ export async function actualizarPago(req, res) {
     const [pagoActual, errorActual] = await getPagoService({ id });
     if (errorActual) return handleErrorClient(res, 404, errorActual);
 
-    if (req.user.role !== "administrador" && pagoActual.rut !== req.user.id) {
+    if (req.user.role !== "administrador" && pagoActual.rut !== req.user.rut) {
       return handleErrorClient(res, 403, "No autorizado");
     }
 
-    // Validar que solo se puedan actualizar ciertos campos
     const camposPermitidos = ["observaciones", "comprobante_url", "fecha_pago", "monto", "mes_referencia"];
     const datosActualizados = {};
-    
+
     for (const campo in req.body) {
       if (camposPermitidos.includes(campo)) {
         datosActualizados[campo] = req.body[campo];
@@ -177,7 +180,7 @@ export async function eliminarPago(req, res) {
     const [pagoActual, errorActual] = await getPagoService({ id });
     if (errorActual) return handleErrorClient(res, 404, errorActual);
 
-    if (req.user.role !== "administrador" && pagoActual.rut !== req.user.id) {
+    if (req.user.role !== "administrador" && pagoActual.rut !== req.user.rut) {
       return handleErrorClient(res, 403, "No autorizado");
     }
 
@@ -190,12 +193,14 @@ export async function eliminarPago(req, res) {
   }
 }
 
-// Precarga inicial de pagos (para seed.js)
+// Precarga inicial de pagos
 export async function createInitialPayments() {
   try {
     const pagoRepository = AppDataSource.getRepository(Payment);
     const pagos = [
       {
+        nombreCompleto: "Alexander Benjamín Marcelo Carrasco Fuentes",
+        email: "usuario2.2024@gmail.cl",
         rut: "20.630.735-8",
         monto: 50000,
         tipo_de_pago: "gasto comun",
@@ -208,6 +213,8 @@ export async function createInitialPayments() {
         updatedAt: new Date(),
       },
       {
+        nombreCompleto: "Felipe Andrés Henríquez Zapata",
+        email: "usuario4.2024@gmail.cl",
         rut: "20.976.635-3",
         monto: 35000,
         tipo_de_pago: "gasto comun",
@@ -220,6 +227,8 @@ export async function createInitialPayments() {
         updatedAt: new Date(),
       },
       {
+        nombreCompleto: "Juan Pablo Rosas Martin",
+        email:"usuario6.2024@gmail.cl",
         rut: "20.738.415-1",
         monto: 60000,
         tipo_de_pago: "gasto comun",
@@ -241,7 +250,7 @@ export async function createInitialPayments() {
         monto: pago.monto,
         mes_referencia: pago.mes_referencia
       });
-      
+
       if (!existe) {
         await pagoRepository.save(pago);
         console.log(`Pago creado para el rut ${pago.rut}`);
@@ -249,7 +258,7 @@ export async function createInitialPayments() {
         console.log(`Pago ya existía para el rut ${pago.rut}`);
       }
     }
-    
+
     return { success: true, message: "Pagos iniciales creados correctamente" };
   } catch (error) {
     console.error("Error al crear pagos iniciales:", error);
