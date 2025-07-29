@@ -3,23 +3,58 @@ import { Router } from "express";
 import multer from "multer";
 import { authenticateJwt } from "../middlewares/authentication.middleware.js";
 import { isAdmin } from "../middlewares/authorization.middleware.js";
-import { actualizarPago, eliminarPago, obtenerPago, obtenerPagos, subirComprobante, validarPago } 
-from "../controllers/payment.controller.js";
+import {
+  actualizarPago,
+  createInitialPayments, // Agregado para desarrollo
+  eliminarPago,
+  listarPagosAdmin,
+  obtenerHistorialPorRut,
+  obtenerPago,
+  obtenerPagos,
+  subirComprobante,
+  validarPago,
+} from "../controllers/payment.controller.js";
 
 const router = Router();  
-const upload = multer({ dest: "uploads/" });
+const upload = multer({ 
+  dest: "uploads/",
+  limits: {
+    fileSize: 5 * 1024 * 1024 // Límite de 5MB para el comprobante
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf" || file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Solo se permiten archivos PDF o imágenes"), false);
+    }
+  }
+});
 
-// Ruta para que usuarios autenticados suban comprobantes
-router.post("/upload", authenticateJwt, upload.single("receipt"), subirComprobante);
-
-// Ruta para que solo administradores validen pagos
-router.post("/validate", authenticateJwt, isAdmin, validarPago);
-
-// CRUD pagos
-
-router.get("/", authenticateJwt, obtenerPagos);
+// Rutas para usuarios
+router.post("/comprobante", authenticateJwt, upload.single("comprobante"), subirComprobante);
+router.get("/mis-pagos", authenticateJwt, obtenerPagos);
 router.get("/:id", authenticateJwt, obtenerPago);
 router.patch("/:id", authenticateJwt, actualizarPago);
 router.delete("/:id", authenticateJwt, eliminarPago);
+
+// Rutas para administradores
+router.put("/validar/:id", authenticateJwt, isAdmin, validarPago);
+router.get("/admin/usuario/:rut/historial", authenticateJwt, isAdmin, obtenerHistorialPorRut);
+router.get("/admin/pagos", authenticateJwt, isAdmin, listarPagosAdmin);
+
+// Ruta para desarrollo (precarga de datos) - Solo disponible en entorno de desarrollo
+if (process.env.NODE_ENV === "development") {
+  router.post("/admin/precargar-pagos", authenticateJwt, isAdmin, async (req, res) => {
+    try {
+      const result = await createInitialPayments();
+      if (result.success) {
+        return res.status(201).json({ message: "Pagos precargados exitosamente" });
+      }
+      return res.status(500).json({ error: result.message });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+}
 
 export default router;

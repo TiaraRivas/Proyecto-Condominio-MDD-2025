@@ -5,7 +5,44 @@ handleErrorClient,
 handleErrorServer,
 } from "../handlers/responseHandlers.js";
 
-export async function isAdmin(req, res, next) {
+
+
+export const isAdmin = async (req, res, next) => {
+  try {
+    const idUsuario = req.user?.id;
+
+    if (!idUsuario) {
+      return res.status(401).json({
+        status: "Client error",
+        message: "Usuario no autenticado",
+      });
+    }
+
+    const userRepository = AppDataSource.getRepository(User);
+    const userFound = await userRepository.findOneBy({ id: idUsuario });
+
+    const rolUser = userFound?.rol?.toLowerCase();
+
+    if (rolUser !== "administrador") {
+      return res.status(403).json({
+        status: "Client error",
+        message: "Solo los administradores pueden listar todos los pagos",
+        details: {},
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      status: "Server error",
+      message: "Error al verificar rol de administrador",
+    });
+  }
+};
+
+
+/*export async function isAdmin(req, res, next) {
 try {
     const userRepository = AppDataSource.getRepository(User);
 
@@ -37,4 +74,4 @@ try {
     error.message,
     );
 }
-}
+}*/

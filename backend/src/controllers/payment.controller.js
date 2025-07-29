@@ -1,31 +1,40 @@
 "use strict";
 import { AppDataSource } from "../config/configDb.js";
 import Payment from "../entity/payment.entity.js";
-import { paymentBodyValidation as pagoBodyValidation, paymentValidateValidation as pagoValidateValidation } 
-from "../validations/payment.validation.js";
+import { paymentBodyValidation } from "../validations/payment.validation.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../handlers/responseHandlers.js";
 import {
-    crearPagoService,
-    deletePagoService,
-    getPagoService, 
-    getPagosService,
-    updatePagoService,
-    validarPagoService
+  crearPagoService,
+  deletePagoService,
+  getPagoService, 
+  getPagosService,
+  listarPagosService,
+  updatePagoService,
+  validarPagoService,
 } from "../services/payment.service.js";
-   
 
-//subir comprobante de pago user
+// Subir comprobante de pago (usuario)
 export async function subirComprobante(req, res) {
   try {
-    const { error } = pagoBodyValidation.validate(req.body);
+    if (!req.user) return handleErrorClient(res, 401, "No autenticado");
+    if (req.user.role !== "usuario") return handleErrorClient(res, 403, "Solo usuarios pueden subir comprobantes");
+    
+    const { error } = paymentBodyValidation.validate(req.body);
     if (error) return handleErrorClient(res, 400, error.message);
 
-    const { amount, type } = req.body;
-    const receiptUrl = req.file ? req.file.path : null;
-    if (!receiptUrl) return handleErrorClient(res, 400, "El comprobante es obligatorio");
-    const userId = req.user.id;
+    const pagoData = {
+      rut: req.user.id,
+      monto: req.body.monto,
+      fecha_pago: req.body.fecha_pago,
+      comprobante_url: req.file ? req.file.path : null,
+      mes_referencia: req.body.mes_referencia,
+      observaciones: req.body.observaciones || null,
+      tipo_de_pago: req.body.tipo_de_pago || "gasto común" // Valor por defecto
+    };
 
-    const [pago, errorPago] = await crearPagoService({ userId, amount, type, receiptUrl });
+    if (!pagoData.comprobante_url) return handleErrorClient(res, 400, "El comprobante es obligatorio");
+
+    const [pago, errorPago] = await crearPagoService(pagoData);
     if (errorPago) return handleErrorServer(res, 500, errorPago);
 
     handleSuccess(res, 201, "Comprobante subido correctamente", pago);
@@ -34,143 +43,211 @@ export async function subirComprobante(req, res) {
   }
 }
 
-// validar pago admin 
+// Validar pago (admin)
 export async function validarPago(req, res) {
   try {
-    const { error } = pagoValidateValidation.validate(req.body);
-    if (error) return handleErrorClient(res, 400, error.message);
+    if (!req.user) return handleErrorClient(res, 401, "No autenticado");
+    if (req.user.role !== "administrador") return handleErrorClient(res, 403, 
+      "Solo administradores pueden validar pagos");
 
-    const { paymentId, status } = req.body;
-    const adminId = req.user.id;
+    const { id } = req.params;
+    const { estado } = req.body;
+    
+    if (!id || !estado) return handleErrorClient(res, 400, "ID de pago y estado son requeridos");
+    
+    const estadosValidos = ["pendiente", "aceptado", "rechazado"];
+    if (!estadosValidos.includes(estado.toLowerCase())) {
+      return handleErrorClient(res, 400, "Estado inválido. Usa: pendiente, aceptado o rechazado");
+    }
 
-    const [pago, errorPago] = await validarPagoService(paymentId, status, adminId);
+    const [pago, errorPago] = await validarPagoService(id, estado.toLowerCase(), req.user.id);
     if (errorPago) return handleErrorServer(res, 500, errorPago);
 
-
-    // Notificación simulada 
-    console.log(
-      `Notificación enviada al residente (userId: ${pago.userId}): ` + `su estado de pago es '${pago.status}'.`
-    );
-
-    handleSuccess(res, 200, "Pago validado", pago);
+    handleSuccess(res, 200, "Pago validado correctamente", pago);
   } catch (error) {
     handleErrorServer(res, 500, error.message);
   }
 }
 
-// CRUD
+// Listar todos los pagos (admin)
+export async function listarPagosAdmin(req, res) {
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "No autenticado");
+    if (req.user.role !== "administrador") return handleErrorClient(res, 403, 
+      "Solo administradores pueden listar todos los pagos");
+
+    const [pagos, errorPagos] = await listarPagosService();
+    if (errorPagos) return handleErrorClient(res, 404, errorPagos);
+
+    handleSuccess(res, 200, "Listado de pagos obtenido con éxito", pagos);
+  } catch (error) {
+    handleErrorServer(res, 500, error.message);
+  }
+}
+
+// Historial por RUT (admin)
+export async function obtenerHistorialPorRut(req, res) {
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "No autenticado");
+    if (req.user.role !== "administrador") return handleErrorClient(res, 403, 
+      "Solo administradores pueden acceder al historial por RUT");
+
+    const { rut } = req.params;
+    if (!rut) return handleErrorClient(res, 400, "El RUT es obligatorio");
+
+    const [pagos, errorPagos] = await listarPagosService({ rut });
+    if (errorPagos) return handleErrorClient(res, 404, errorPagos);
+
+    handleSuccess(res, 200, `Historial de pagos para el RUT ${rut}`, pagos);
+  } catch (error) {
+    handleErrorServer(res, 500, error.message);
+  }
+}
+
+// Obtener historial del usuario actual
+export async function obtenerPagos(req, res) {
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "No autenticado");
+
+    const [pagos, errorPagos] = await listarPagosService({ rut: req.user.id });
+    if (errorPagos) return handleErrorClient(res, 404, errorPagos);
+
+    handleSuccess(res, 200, "Historial de pagos obtenido", pagos);
+  } catch (error) {
+    handleErrorServer(res, 500, error.message);
+  }
+}
+
+// Obtener un pago específico
 export async function obtenerPago(req, res) {
   try {
     const { id } = req.params;
     const [pago, errorPago] = await getPagoService({ id });
     if (errorPago) return handleErrorClient(res, 404, errorPago);
+
+    if (req.user.role !== "administrador" && pago.rut !== req.user.id) {
+      return handleErrorClient(res, 403, "No autorizado");
+    }
+
     handleSuccess(res, 200, "Pago encontrado", pago);
   } catch (error) {
     handleErrorServer(res, 500, error.message);
   }
 }
 
-export async function obtenerPagos(req, res) {
-  try {
-    const [pagos, errorPagos] = await getPagosService();
-    if (errorPagos) return handleErrorClient(res, 404, errorPagos);
-    handleSuccess(res, 200, "Pagos encontrados", pagos);
-  } catch (error) {
-    handleErrorServer(res, 500, error.message);
-  }
-}
-
+// Actualizar pago
 export async function actualizarPago(req, res) {
   try {
     const { id } = req.params;
-    const [pago, errorPago] = await updatePagoService({ id }, req.body);
+    const [pagoActual, errorActual] = await getPagoService({ id });
+    if (errorActual) return handleErrorClient(res, 404, errorActual);
+
+    if (req.user.role !== "administrador" && pagoActual.rut !== req.user.id) {
+      return handleErrorClient(res, 403, "No autorizado");
+    }
+
+    // Validar que solo se puedan actualizar ciertos campos
+    const camposPermitidos = ["observaciones", "comprobante_url", "fecha_pago", "monto", "mes_referencia"];
+    const datosActualizados = {};
+    
+    for (const campo in req.body) {
+      if (camposPermitidos.includes(campo)) {
+        datosActualizados[campo] = req.body[campo];
+      }
+    }
+
+    const [pago, errorPago] = await updatePagoService(id, datosActualizados);
     if (errorPago) return handleErrorClient(res, 400, errorPago);
+
     handleSuccess(res, 200, "Pago actualizado", pago);
   } catch (error) {
     handleErrorServer(res, 500, error.message);
   }
 }
 
+// Eliminar pago
 export async function eliminarPago(req, res) {
   try {
     const { id } = req.params;
-    const [pago, errorPago] = await deletePagoService({ id });
+    const [pagoActual, errorActual] = await getPagoService({ id });
+    if (errorActual) return handleErrorClient(res, 404, errorActual);
+
+    if (req.user.role !== "administrador" && pagoActual.rut !== req.user.id) {
+      return handleErrorClient(res, 403, "No autorizado");
+    }
+
+    const [pago, errorPago] = await deletePagoService(id);
     if (errorPago) return handleErrorClient(res, 400, errorPago);
+
     handleSuccess(res, 200, "Pago eliminado", pago);
   } catch (error) {
     handleErrorServer(res, 500, error.message);
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Precarga inicial de pagos (para seed.js)
 export async function createInitialPayments() {
-  const pagoRepository = AppDataSource.getRepository(Payment);
-  const pagos = [
-    {
-        userId: 1,
-        amount: 50000,
-        type: "gasto comun",
-        receiptUrl: "uploads/recibo1.pdf",
-        status: "Pendiente",
+  try {
+    const pagoRepository = AppDataSource.getRepository(Payment);
+    const pagos = [
+      {
+        rut: "20.630.735-8",
+        monto: 50000,
+        tipo_de_pago: "gasto comun",
+        fecha_pago: "2025-07-01",
+        comprobante_url: "uploads/recibo1.pdf",
+        mes_referencia: "2025-07",
+        observaciones: "Pago inicial",
+        estado: "Pendiente",
         createdAt: new Date(),
         updatedAt: new Date(),
-    },
-    {
-      userId: 2,
-      amount: 35000,
-      type: "servicio basico",
-      receiptUrl: "uploads/recibo2.pdf",
-      status: "Pendiente",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      userId: 1,
-      amount: 60000,
-      type: "gasto comun",
-      receiptUrl: "uploads/recibo3.pdf",
-      status: "Pagado",
-      validatedBy: 99,
-      validatedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      },
+      {
+        rut: "20.976.635-3",
+        monto: 35000,
+        tipo_de_pago: "gasto comun",
+        fecha_pago: "2025-07-05",
+        comprobante_url: "uploads/recibo2.pdf",
+        mes_referencia: "2025-07",
+        observaciones: "Pago inicial",
+        estado: "Pendiente",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        rut: "20.738.415-1",
+        monto: 60000,
+        tipo_de_pago: "gasto comun",
+        fecha_pago: "2025-07-10",
+        comprobante_url: "uploads/recibo3.pdf",
+        mes_referencia: "2025-07",
+        observaciones: "Pago inicial",
+        estado: "aceptado",
+        validatedBy: 1,
+        validatedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+    ];
+
+    for (const pago of pagos) {
+      const existe = await pagoRepository.findOneBy({
+        rut: pago.rut,
+        monto: pago.monto,
+        mes_referencia: pago.mes_referencia
+      });
+      
+      if (!existe) {
+        await pagoRepository.save(pago);
+        console.log(`Pago creado para el rut ${pago.rut}`);
+      } else {
+        console.log(`Pago ya existía para el rut ${pago.rut}`);
+      }
     }
-  ];
-  for (const pago of pagos) {
-    const existe = await pagoRepository.findOneBy({
-      userId: pago.userId,
-      amount: pago.amount,
-      type: pago.type
-    });
-    if (!existe) {
-      await pagoRepository.save(pago);
-    }
+    
+    return { success: true, message: "Pagos iniciales creados correctamente" };
+  } catch (error) {
+    console.error("Error al crear pagos iniciales:", error);
+    return { success: false, message: error.message };
   }
 }
-

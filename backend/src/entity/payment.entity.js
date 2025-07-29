@@ -10,25 +10,26 @@ const PaymentSchema = new EntitySchema({
       primary: true,
       generated: true,
     },
-    userId: {
-      type: "int",
+    rut: {
+      type: "varchar",
+      length: 12,
       nullable: false,
     },
-    amount: {
+    monto: {
       type: "decimal",
       nullable: false,
     },
-    type: {
+    tipo_de_pago: {
       type: "varchar",
       length: 30,
       nullable: false,
     },
-    receiptUrl: {
+    Url: {
       type: "varchar",
       length: 255,
       nullable: false,
     },
-    status: {
+    estado: {
       type: "varchar",
       length: 15,
       default: "Pendiente",
