@@ -38,23 +38,24 @@ router.patch("/:id", authenticateJwt, actualizarPago);
 router.delete("/:id", authenticateJwt, eliminarPago);
 
 // Rutas para administradores
+router.patch("/validar/:id", authenticateJwt, isAdmin, validarPago);
 router.put("/validar/:id", authenticateJwt, isAdmin, validarPago);
+
 router.get("/admin/usuario/:rut/historial", authenticateJwt, isAdmin, obtenerHistorialPorRut);
-router.get("/admin/pagos", authenticateJwt, isAdmin, listarPagosAdmin);
+router.get("/listar/historial", authenticateJwt, isAdmin, listarPagosAdmin);
 
 // Ruta para desarrollo (precarga de datos) - Solo disponible en entorno de desarrollo
-if (process.env.NODE_ENV === "development") {
-  router.post("/admin/precargar-pagos", authenticateJwt, isAdmin, async (req, res) => {
-    try {
-      const result = await createInitialPayments();
-      if (result.success) {
-        return res.status(201).json({ message: "Pagos precargados exitosamente" });
-      }
-      return res.status(500).json({ error: result.message });
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
+// Ruta para desarrollo (precarga de datos)
+router.post("/admin/precargar-pagos", authenticateJwt, isAdmin, async (req, res) => {
+  try {
+    const result = await createInitialPayments();
+    if (result.success) {
+      return res.status(201).json({ message: "Pagos precargados exitosamente" });
     }
-  });
-}
+    return res.status(500).json({ error: result.message });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
 
 export default router;

@@ -17,7 +17,7 @@ import {
 export async function subirComprobante(req, res) {
   try {
     if (!req.user) return handleErrorClient(res, 401, "No autenticado");
-    if (req.user.role !== "usuario") return handleErrorClient(res, 403, "Solo usuarios pueden subir comprobantes");
+    if (req.user.rol !== "usuario") return handleErrorClient(res, 403, "Solo usuarios pueden subir comprobantes");
     
     const { error } = paymentBodyValidation.validate(req.body);
     if (error) return handleErrorClient(res, 400, error.message);
@@ -47,7 +47,7 @@ export async function subirComprobante(req, res) {
 export async function validarPago(req, res) {
   try {
     if (!req.user) return handleErrorClient(res, 401, "No autenticado");
-    if (req.user.role !== "administrador") return handleErrorClient(res, 403, 
+    if (req.user.rol !== "administrador") return handleErrorClient(res, 403, 
       "Solo administradores pueden validar pagos");
 
     const { id } = req.params;
@@ -73,7 +73,7 @@ export async function validarPago(req, res) {
 export async function listarPagosAdmin(req, res) {
   try {
     if (!req.user) return handleErrorClient(res, 401, "No autenticado");
-    if (req.user.role !== "administrador") return handleErrorClient(res, 403, 
+    if (req.user.rol !== "administrador") return handleErrorClient(res, 403, 
       "Solo administradores pueden listar todos los pagos");
 
     const [pagos, errorPagos] = await listarPagosService();
@@ -83,13 +83,18 @@ export async function listarPagosAdmin(req, res) {
   } catch (error) {
     handleErrorServer(res, 500, error.message);
   }
+  const [pagos, errorPagos] = await listarPagosService();
+if (errorPagos) {
+  console.error("Error en listarPagosAdmin:", errorPagos);
+  return handleErrorClient(res, 500, errorPagos);
+}
 }
 
 // Historial por RUT (admin)
 export async function obtenerHistorialPorRut(req, res) {
   try {
     if (!req.user) return handleErrorClient(res, 401, "No autenticado");
-    if (req.user.role !== "administrador") return handleErrorClient(res, 403, 
+    if (req.user.rol !== "administrador") return handleErrorClient(res, 403, 
       "Solo administradores pueden acceder al historial por RUT");
 
     const { rut } = req.params;

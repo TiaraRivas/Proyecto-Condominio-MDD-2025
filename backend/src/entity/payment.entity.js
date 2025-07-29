@@ -24,10 +24,23 @@ const PaymentSchema = new EntitySchema({
       length: 30,
       nullable: false,
     },
-    Url: {
+    fecha_pago: {
+      type: "date",
+      nullable: true,
+    },
+    comprobante_url: { 
       type: "varchar",
       length: 255,
-      nullable: false,
+      nullable: true,
+    },
+    mes_referencia: {
+      type: "varchar",
+      length: 7, 
+      nullable: true,
+    },
+    observaciones: {
+      type: "text",
+      nullable: true,
     },
     estado: {
       type: "varchar",
@@ -55,6 +68,16 @@ const PaymentSchema = new EntitySchema({
       nullable: false,
     },
   },
+
+  relations: {
+    usuario: {
+      type: "many-to-one",
+      target: "User",  // Debe coincidir con el nombre de tu entidad User
+      joinColumn: { name: "rut", referencedColumnName: "rut" },
+      eager: false,    // Cambia a true si quieres que siempre cargue el usuario con el pago
+    }
+  },
+
 });
 
 export default PaymentSchema;
