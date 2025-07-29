@@ -5,7 +5,7 @@ const PaymentSchema = new EntitySchema({
   name: "Payment",
   tableName: "RegistroPagos",
   columns: {
-    id: {
+    pago_id: {
       type: "int",
       primary: true,
       generated: true,

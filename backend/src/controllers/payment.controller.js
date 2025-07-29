@@ -23,16 +23,18 @@ export async function subirComprobante(req, res) {
     const { error, value } = paymentBodyValidation.validate(req.body);
     if (error) return handleErrorClient(res, 400, error.message);
 
-    // Buscar datos del usuario a partir del RUT
+    // Usar el RUT desde el token
+    const rutUsuario = req.user.rut;
+
     const userRepository = AppDataSource.getRepository(User);
-    const user = await userRepository.findOne({ where: { rut: value.rut } });
+    const user = await userRepository.findOne({ where: { rut: rutUsuario } });
 
     if (!user) return handleErrorClient(res, 404, "Usuario no encontrado con ese RUT");
 
     const pagoData = {
       nombreCompleto: user.nombreCompleto,
       email: user.email,
-      rut: user.rut,
+      rut: user.rut, // ← asegura que el pago sea tuyo
       monto: value.monto,
       fecha_pago: value.fecha_pago,
       comprobante_url: req.file ? req.file.path : value.comprobante_url || null,
@@ -52,6 +54,7 @@ export async function subirComprobante(req, res) {
   }
 }
 
+
 // Validar pago (admin)
 export async function validarPago(req, res) {
   try {
@@ -59,17 +62,17 @@ export async function validarPago(req, res) {
     if (req.user.rol !== "administrador") return handleErrorClient(res, 403, 
       "Solo administradores pueden validar pagos");
 
-    const { id } = req.params;
+    const { pago_id } = req.params;
     const { estado } = req.body;
 
-    if (!id || !estado) return handleErrorClient(res, 400, "ID de pago y estado son requeridos");
+    if (!pago_id || !estado) return handleErrorClient(res, 400, "ID de pago y estado son requeridos");
 
     const estadosValidos = ["pendiente", "aceptado", "rechazado"];
     if (!estadosValidos.includes(estado.toLowerCase())) {
       return handleErrorClient(res, 400, "Estado inválido. Usa: pendiente, aceptado o rechazado");
     }
 
-    const [pago, errorPago] = await validarPagoService(id, estado.toLowerCase(), req.user.id);
+    const [pago, errorPago] = await validarPagoService(pago_id, estado.toLowerCase(), req.user.id);
     if (errorPago) return handleErrorServer(res, 500, errorPago);
 
     handleSuccess(res, 200, "Pago validado correctamente", pago);
@@ -130,8 +133,8 @@ export async function obtenerPagos(req, res) {
 // Obtener un pago específico
 export async function obtenerPago(req, res) {
   try {
-    const { id } = req.params;
-    const [pago, errorPago] = await getPagoService({ id });
+    const { pago_id } = req.params;
+    const [pago, errorPago] = await getPagoService({ pago_id });
     if (errorPago) return handleErrorClient(res, 404, errorPago);
 
     if (req.user.role !== "administrador" && pago.rut !== req.user.rut) {
@@ -147,11 +150,11 @@ export async function obtenerPago(req, res) {
 // Actualizar pago
 export async function actualizarPago(req, res) {
   try {
-    const { id } = req.params;
-    const [pagoActual, errorActual] = await getPagoService({ id });
+    const { pago_id } = req.params;
+    const [pagoActual, errorActual] = await getPagoService({ pago_id: Number(pago_id) });
     if (errorActual) return handleErrorClient(res, 404, errorActual);
 
-    if (req.user.role !== "administrador" && pagoActual.rut !== req.user.rut) {
+    if (req.user.rol !== "administrador" && pagoActual.rut !== req.user.rut) {
       return handleErrorClient(res, 403, "No autorizado");
     }
 
@@ -164,7 +167,7 @@ export async function actualizarPago(req, res) {
       }
     }
 
-    const [pago, errorPago] = await updatePagoService(id, datosActualizados);
+    const [pago, errorPago] = await updatePagoService(Number(pago_id), datosActualizados);
     if (errorPago) return handleErrorClient(res, 400, errorPago);
 
     handleSuccess(res, 200, "Pago actualizado", pago);
@@ -173,18 +176,19 @@ export async function actualizarPago(req, res) {
   }
 }
 
+
 // Eliminar pago
 export async function eliminarPago(req, res) {
   try {
-    const { id } = req.params;
-    const [pagoActual, errorActual] = await getPagoService({ id });
+    const { pago_id } = req.params;
+    const [pagoActual, errorActual] = await getPagoService({ pago_id });
     if (errorActual) return handleErrorClient(res, 404, errorActual);
 
     if (req.user.role !== "administrador" && pagoActual.rut !== req.user.rut) {
       return handleErrorClient(res, 403, "No autorizado");
     }
 
-    const [pago, errorPago] = await deletePagoService(id);
+    const [pago, errorPago] = await deletePagoService(pago_id);
     if (errorPago) return handleErrorClient(res, 400, errorPago);
 
     handleSuccess(res, 200, "Pago eliminado", pago);

@@ -17,7 +17,7 @@ export async function crearPagoService(pagoData) {
       createdAt: new Date(),
       updatedAt: new Date()
     });
-    
+
     const pagoGuardado = await pagoRepository.save(nuevoPago);
     return [pagoGuardado, null];
   } catch (error) {
@@ -41,7 +41,7 @@ export async function getPagoService(query) {
 export async function getPagosService(filters = {}) {
   try {
     const pagoRepository = AppDataSource.getRepository(Payment);
-    const pagos = await pagoRepository.find({ 
+    const pagos = await pagoRepository.find({
       where: filters,
       order: { createdAt: "DESC" }
     });
@@ -55,8 +55,7 @@ export async function getPagosService(filters = {}) {
 export async function listarPagosService(filters = {}) {
   try {
     const pagoRepository = AppDataSource.getRepository(Payment);
-    
-    // Filtros adicionales para listado
+
     const whereConditions = {};
     if (filters.rut) whereConditions.rut = filters.rut;
     if (filters.estado) whereConditions.estado = filters.estado;
@@ -75,17 +74,16 @@ export async function listarPagosService(filters = {}) {
   }
 }
 
-export async function updatePagoService(id, updateData) {
+export async function updatePagoService(pago_id, updateData) {
   try {
     const pagoRepository = AppDataSource.getRepository(Payment);
-    const pago = await pagoRepository.findOneBy({ id });
-    
+    const pago = await pagoRepository.findOneBy({ pago_id });
+
     if (!pago) return [null, "Pago no encontrado"];
 
-    // Campos permitidos para actualización
     const camposPermitidos = [
-      "observaciones", 
-      "comprobante_url", 
+      "observaciones",
+      "comprobante_url",
       "fecha_pago",
       "estado"
     ];
@@ -105,33 +103,33 @@ export async function updatePagoService(id, updateData) {
   }
 }
 
-export async function deletePagoService(id) {
+export async function deletePagoService(pago_id) {
   try {
     const pagoRepository = AppDataSource.getRepository(Payment);
-    const pago = await pagoRepository.findOneBy({ id });
-    
+    const pago = await pagoRepository.findOneBy({ pago_id });
+
     if (!pago) return [null, "Pago no encontrado"];
-    
+
     await pagoRepository.remove(pago);
-    return [{ id, message: "Pago eliminado" }, null];
+    return [{ pago_id, message: "Pago eliminado" }, null];
   } catch (error) {
     console.error("Error en deletePagoService:", error);
     return [null, "Error al eliminar pago"];
   }
 }
 
-export async function validarPagoService(id, estado, adminId) {
+export async function validarPagoService(pago_id, estado, adminId) {
   try {
     const pagoRepository = AppDataSource.getRepository(Payment);
-    const pago = await pagoRepository.findOneBy({ id });
-    
+    const pago = await pagoRepository.findOneBy({ pago_id });
+
     if (!pago) return [null, "Pago no encontrado"];
-    
+
     pago.estado = estado;
     pago.validatedBy = adminId;
     pago.validatedAt = new Date();
     pago.updatedAt = new Date();
-    
+
     const pagoActualizado = await pagoRepository.save(pago);
     return [pagoActualizado, null];
   } catch (error) {
@@ -140,18 +138,17 @@ export async function validarPagoService(id, estado, adminId) {
   }
 }
 
-// Función para precarga de datos (usada en desarrollo)
 export async function precargarPagosService(pagosData) {
   try {
     const pagoRepository = AppDataSource.getRepository(Payment);
     const resultados = [];
-    
+
     for (const pagoData of pagosData) {
       const existe = await pagoRepository.findOneBy({
         rut: pagoData.rut,
         mes_referencia: pagoData.mes_referencia
       });
-      
+
       if (!existe) {
         const nuevoPago = pagoRepository.create({
           ...pagoData,
@@ -164,7 +161,7 @@ export async function precargarPagosService(pagosData) {
         resultados.push({ success: false, rut: pagoData.rut, message: "Ya existe" });
       }
     }
-    
+
     return [resultados, null];
   } catch (error) {
     console.error("Error en precargarPagosService:", error);

@@ -5,7 +5,7 @@ import { authenticateJwt } from "../middlewares/authentication.middleware.js";
 import { isAdmin } from "../middlewares/authorization.middleware.js";
 import {
   actualizarPago,
-  createInitialPayments, // Agregado para desarrollo
+  createInitialPayments,
   eliminarPago,
   listarPagosAdmin,
   obtenerHistorialPorRut,
@@ -15,11 +15,13 @@ import {
   validarPago,
 } from "../controllers/payment.controller.js";
 
-const router = Router();  
+const router = Router();
+
+// Configuración de multer para subir comprobantes
 const upload = multer({ 
   dest: "uploads/",
   limits: {
-    fileSize: 5 * 1024 * 1024 // Límite de 5MB para el comprobante
+    fileSize: 5 * 1024 * 1024 // Límite: 5MB
   },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === "application/pdf" || file.mimetype.startsWith("image/")) {
@@ -30,32 +32,54 @@ const upload = multer({
   }
 });
 
-// Rutas para usuarios
+// ══════════════════════════════════════════════
+// ░░ RUTAS PARA USUARIOS AUTENTICADOS ░░
+// ══════════════════════════════════════════════
+
+// Subir comprobante
 router.post("/comprobante", authenticateJwt, upload.single("comprobante"), subirComprobante);
+
+// Ver pagos propios
 router.get("/mis-pagos", authenticateJwt, obtenerPagos);
-router.get("/:id", authenticateJwt, obtenerPago);
-router.patch("/actualizar/:id", authenticateJwt, actualizarPago);
-router.delete("/eliminar/:id", authenticateJwt, eliminarPago);
 
-// Rutas para administradores
-router.patch("/validar/:id", authenticateJwt, isAdmin, validarPago); // es una de las dos o las dos para que funcione
-//router.put("/validar/:id", authenticateJwt, isAdmin, validarPago);
+// Obtener pago específico
+router.get("/:pago_id", authenticateJwt, obtenerPago);
 
+// Actualizar un pago
+router.patch("/actualizar/:pago_id", authenticateJwt, actualizarPago);
+
+// Eliminar un pago
+router.delete("/eliminar/:pago_id", authenticateJwt, eliminarPago);
+
+// ══════════════════════════════════════════════
+// ░░ RUTAS PARA ADMINISTRADORES ░░
+// ══════════════════════════════════════════════
+
+// Validar un pago
+router.patch("/validar/:pago_id", authenticateJwt, isAdmin, validarPago);
+
+// Ver historial de un usuario por RUT
 router.get("/usuario/:rut/historial", authenticateJwt, isAdmin, obtenerHistorialPorRut);
+
+// Listar todos los pagos para el historial general
 router.get("/listar/historial", authenticateJwt, isAdmin, listarPagosAdmin);
 
-// Ruta para desarrollo (precarga de datos) - Solo disponible en entorno de desarrollo
-// Ruta para desarrollo (precarga de datos)
-router.post("/admin/precargar-pagos", authenticateJwt, isAdmin, async (req, res) => {
-  try {
-    const result = await createInitialPayments();
-    if (result.success) {
-      return res.status(201).json({ message: "Pagos precargados exitosamente" });
+// ══════════════════════════════════════════════
+// ░░ RUTA DE PRECARGA (SOLO DESARROLLO) ░░
+// ══════════════════════════════════════════════
+
+if (process.env.NODE_ENV === "development") {
+  router.post("/admin/precargar-pagos", authenticateJwt, isAdmin, async (req, res) => {
+    try {
+      const result = await createInitialPayments();
+      if (result.success) {
+        return res.status(201).json({ message: "Pagos precargados exitosamente" });
+      }
+      return res.status(500).json({ error: result.message });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
     }
-    return res.status(500).json({ error: result.message });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-});
+  });
+}
 
 export default router;
